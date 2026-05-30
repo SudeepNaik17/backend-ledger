@@ -24,7 +24,7 @@ const ledgerSchema = mongoose.Schema(
       type: String,
       enum: {
         values: ["CREDIT", "DEBIT"],
-        message: "type msut be credit or debit",
+        message: "type must be credit or debit",
       },
       default: "DEBIT",
       immutable: true,
