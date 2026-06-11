@@ -1,6 +1,7 @@
 const accountModel = require("../models/account.model");
 const ledgerModel = require("../models/ledger.model");
 const transactionModel = require("../models/transaction.model");
+const userModel = require("../models/user.model");
 const emailService = require("../services/email.service");
 const mongoose = require("mongoose");
 /**
@@ -38,7 +39,7 @@ const createTransaction = async (req, res) => {
   });
 
   if (!fromUserAccount && !toUserAccount) {
-    return res.staus(400).json({
+    return res.status(400).json({
       message: " fromUserAccount and toUserAccount is required",
     });
   }
@@ -46,7 +47,7 @@ const createTransaction = async (req, res) => {
   /*
    *- 2.Validate idempotence key
    */
-  const isTransactionAlreadyExists = await accountModel.findOne({
+  const isTransactionAlreadyExists = await transactionModel.findOne({
     idempotencyKey,
   });
 
@@ -78,7 +79,7 @@ const createTransaction = async (req, res) => {
     */
 
   if (fromUserAccount.status != "ACTIVE" || toUserAccount.status != "ACTIVE") {
-    res.status(400).json({
+    return res.status(400).json({
       message: "for transaction both fromAccount toAccount should be active",
     });
   }
@@ -167,6 +168,81 @@ const createTransaction = async (req, res) => {
   });
 };
 
+async function createInitialFundsTransaction(req, res) {
+  const { toAccount, amount, idempotencyKey } = req.body;
+
+  if (!toAccount || !amount || !idempotencyKey) {
+    return res.status(400).json({
+      message: "toAccount,amount and idempotencyKey are required",
+    });
+  }
+
+  const toUserAccount = await accountModel.findOne({
+    _id: toAccount,
+  });
+
+  if (!toUserAccount) {
+    return res.status(400).json({
+      message: "Invalid Account!",
+    });
+  }
+  const systemUserObjectId = new mongoose.Types.ObjectId(req.user._id);
+  const fromUserAccount = await accountModel.findOne({
+    user: systemUserObjectId,
+  });
+  console.log(fromUserAccount);
+
+  if (!fromUserAccount) {
+    return res.status(400).json({
+      message: "invalid system account!",
+    });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  const transaction = new transactionModel({
+    fromAccount: fromUserAccount._id,
+    toAccount,
+    status: "PENDING",
+    amount,
+    idempotencyKey,
+  });
+  const debitLedgerEntry = await ledgerModel.create(
+    [
+      {
+        account: fromUserAccount._id,
+        amount,
+        transaction: transaction._id,
+        type: "DEBIT",
+      },
+    ],
+    { session },
+  );
+  const creditLedgerEntry = await ledgerModel.create(
+    [
+      {
+        account: toUserAccount._id,
+        amount,
+        transaction: transaction._id,
+        type: "CREDIT",
+      },
+    ],
+    { session },
+  );
+
+  transaction.status = "COMPLETED";
+  await transaction.save({ session });
+
+  await session.commitTransaction();
+  session.endSession();
+  return res.status(201).json({
+    message: "Initial fund transaction completed sucessfully!",
+    transaction,
+  });
+}
+
 module.exports = {
   createTransaction,
+  createInitialFundsTransaction,
 };
