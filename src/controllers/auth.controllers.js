@@ -52,4 +52,44 @@ const userRegisterController = async (req, res) => {
   }
 };
 
-module.exports = { userRegisterController };
+const userLoginController = async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(401).json({
+      message: "email and password are required!",
+    });
+  }
+  const user = await userModel.findOne({ email }).select("+password");
+  if (!user) {
+    return res.status(401).json({
+      message: "Email or password is invalid!",
+    });
+  }
+  const isValidPassword = await user.comparePassword(password);
+
+  if (!isValidPassword) {
+    return res.status(401).json({
+      message: "Email or password is invalid!",
+    });
+  }
+
+  const token = jwt.sign(
+    {
+      userId: user._id,
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "3d" },
+  );
+  res.cookie("token", token);
+  res.status(200).json({
+    message: "User logined sucessfully!",
+    user: {
+      id: user._id,
+      name: user.name,
+      email,
+    },
+    token,
+    status: "success",
+  });
+};
+module.exports = { userRegisterController, userLoginController };
