@@ -92,7 +92,7 @@ const userLoginController = async (req, res) => {
     status: "success",
   });
 };
-const userLogoutController = (req, res) => {
+const userLogoutController = async (req, res) => {
   const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
 
   if (!token) {
@@ -100,12 +100,17 @@ const userLogoutController = (req, res) => {
       message: "User logged out sucessfully!",
     });
   }
-  res.cookie("token", " ");
+
   await tokenBlackListModel.create({
-    token
-  })
+    token,
+  });
+  res.clearCookie("token");
   res.status(200).json({
-    message:"User logged out sucessfully!"
-  })
+    message: "User logged out sucessfully!",
+  });
 };
-module.exports = { userRegisterController, userLoginController };
+module.exports = {
+  userRegisterController,
+  userLoginController,
+  userLogoutController,
+};
